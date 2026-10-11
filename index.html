@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto Printer</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f5f4;
+      --panel: #ffffff;
+      --text: #1c1917;
+      --muted: #78716c;
+      --border: #d6d3d1;
+      --desk: #e7e5e4;
+      --accent: #2563eb;
+      --ok: #15803d;
+      --error: #b91c1c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #1c1917;
+        --panel: #292524;
+        --text: #f5f5f4;
+        --muted: #a8a29e;
+        --border: #44403c;
+        --desk: #0c0a09;
+        --accent: #60a5fa;
+        --ok: #4ade80;
+        --error: #f87171;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #1c1917;
+      --panel: #292524;
+      --text: #f5f5f4;
+      --muted: #a8a29e;
+      --border: #44403c;
+      --desk: #0c0a09;
+      --accent: #60a5fa;
+      --ok: #4ade80;
+      --error: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+    }
+    main { max-width: 1400px; margin: 0 auto; display: grid; gap: 16px; }
+    h1 { font-size: 1.3rem; margin: 0; }
+    h2 { font-size: 0.95rem; margin: 0 0 8px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      min-width: 0;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .spacer { flex: 1; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+    .fields.single { grid-template-columns: 1fr 1fr; }
+    .field { display: grid; gap: 4px; font-size: 0.85rem; min-width: 0; }
+    .field > span { color: var(--muted); }
+    .field small { color: var(--muted); }
+    button, input, select, textarea { font: inherit; color: var(--text); }
+    button {
+      padding: 7px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      cursor: pointer;
+    }
+    button.icon { padding: 3px 8px; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button[hidden] { display: none; }
+    input, select, textarea {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      width: 100%;
+      min-width: 0;
+    }
+    input[type="checkbox"] { width: auto; justify-self: start; }
+    textarea { resize: vertical; font-family: ui-monospace, Menlo, monospace; }
+    #status { font-size: 0.9rem; color: var(--muted); min-height: 1.2em; }
+    #status[data-kind="ok"] { color: var(--ok); }
+    #status[data-kind="error"] { color: var(--error); }
+
+    .add-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .layers { display: grid; gap: 4px; max-height: 40vh; overflow: auto; }
+    .layer {
+      display: flex; gap: 4px; align-items: center; min-width: 0;
+      border: 1px solid transparent; border-radius: 8px; padding: 2px;
+    }
+    .layer button.icon { flex: none; }
+    .layer.active { border-color: var(--accent); }
+    .layer-name {
+      flex: 1; min-width: 0; text-align: left; border: none; background: none;
+      padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .desk {
+      background: var(--desk);
+      border-radius: 12px;
+      padding: 16px;
+      overflow: auto;
+      display: grid;
+      justify-items: center;
+      align-content: start;
+      min-height: 60vh;
+    }
+    .stage { position: relative; }
+    .stage canvas {
+      display: block;
+      background: #fff;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+    }
+    .overlay { position: absolute; inset: 0; }
+    .overlay[hidden] { display: none; }
+    .hit {
+      position: absolute;
+      cursor: move;
+      outline: 1px dashed transparent;
+      outline-offset: 2px;
+      touch-action: none;
+    }
+    .hit:hover { outline-color: rgba(37, 99, 235, 0.5); }
+    .hit.selected { outline: 2px solid var(--accent); }
+    .handle {
+      position: absolute;
+      right: -7px;
+      bottom: -7px;
+      width: 12px;
+      height: 12px;
+      background: var(--accent);
+      border: 2px solid #fff;
+      border-radius: 2px;
+      cursor: nwse-resize;
+    }
+
+    .workspace { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+    .side { display: grid; gap: 16px; align-content: start; min-width: 0; }
+    @media (min-width: 1100px) {
+      .workspace { grid-template-columns: 240px minmax(0, 1fr) 320px; align-items: start; }
+      .side.right { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+      .side.left { position: sticky; top: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="panel row">
+      <h1>Auto Printer</h1>
+      <span class="spacer"></span>
+      <span id="status" aria-live="polite"></span>
+      <span class="spacer"></span>
+      <button id="connect" class="primary">Connect printer</button>
+      <button id="disconnect" hidden>Disconnect</button>
+      <button id="print" class="primary" disabled>Print</button>
+    </section>
+
+    <div class="workspace">
+      <aside class="side left">
+        <section class="panel">
+          <h2>Add element</h2>
+          <div id="add-buttons" class="add-buttons"></div>
+        </section>
+        <section class="panel">
+          <h2>Layers</h2>
+          <div id="layers" class="layers"></div>
+        </section>
+        <section class="panel row">
+          <button id="export-json">Export JSON</button>
+          <button id="import-btn">Import JSON</button>
+          <input id="import-json" type="file" accept="application/json" hidden>
+        </section>
+      </aside>
+
+      <section class="desk-wrap">
+        <div class="row" style="margin-bottom: 10px;">
+          <button id="view-design" aria-pressed="true">Design</button>
+          <button id="view-print" aria-pressed="false">Print preview</button>
+          <span class="spacer"></span>
+          <span id="page-info" class="muted"></span>
+        </div>
+        <div id="desk" class="desk">
+          <div id="stage" class="stage">
+            <canvas id="page"></canvas>
+            <div id="overlay" class="overlay"></div>
+          </div>
+        </div>
+        <p class="muted" style="margin: 8px 2px 0;">Drag to move, drag the corner to resize, arrow keys nudge (Shift for 10), Delete removes. Print preview shows exactly what the printer receives.</p>
+      </section>
+
+      <aside class="side right">
+        <section class="panel">
+          <h2>Element</h2>
+          <div id="inspector"></div>
+        </section>
+        <section class="panel">
+          <h2>Page &amp; printer</h2>
+          <div id="settings" class="fields single"></div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <script src="escpos.js"></script>
+  <script src="printer.js"></script>
+  <script src="designer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
